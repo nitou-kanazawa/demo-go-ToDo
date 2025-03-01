@@ -1,33 +1,61 @@
 package main
 
 import (
+	"html"
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 )
 
 
-var todolist []string
+var todolists = make(map[string][]string)
 
-// 表示
+// セッションIDに紐づくToDoリストを取得する．
+func getTodoList(sessionId string) []string{
+	todos, ok := todolists[sessionId]
+	if !ok {
+		todos = []string{}
+		todolists[sessionId] = todos
+	}
+
+	return todos
+}
+
+// ToDoリストを返す
 func handleTodo(w http.ResponseWriter, r *http.Request){
+	sessionId, err := ensureSession(w, r)
+	if err != nil{
+		http.Error(w, err.Error(), 500)
+		return
+	}  
+  todos := getTodoList(sessionId)
+
 	// テンプレートからHTML生成
 	t,_ := template.ParseFiles("templates/todo.html")
-	t.Execute(w, todolist)
+	t.Execute(w, todos)
 }
 
 // 追加
 func handleAdd(w http.ResponseWriter, r *http.Request) {
+	sessionId, err := ensureSession(w, r)
+	if err != nil{
+		http.Error(w, err.Error(), 500)
+		return
+	}  
+  todos := getTodoList(sessionId)
+
 	r.ParseForm()
-	todo := r.Form.Get("todo")
-	todolist = append(todolist, todo)
+	todo := strings.TrimSpace(html.EscapeString(r.Form.Get("todo")))	
+	if todo != ""{
+		todolists[sessionId] = append(todos, todo)
+	}
 	// リダイレクト
 	http.Redirect(w,r,"/todo", 303)
 }
 
 
 func main(){
-	todolist = append(todolist, "顔を洗う", "朝食を食べる", "歯を磨く")
 
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	http.HandleFunc("/todo", handleTodo)
